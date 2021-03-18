@@ -1,0 +1,268 @@
+---
+title: "Power Analysis Plots"
+author: "Teemu Säilynoja"
+output: html_notebook
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+source("ecdf_plot_functions.R")
+theme_set(bayesplot::theme_default(base_family = "sans"))
+library(ggplot2)
+library(latex2exp)
+library(ggpubr)
+library(khroma)
+text_size <- 15
+```
+
+## Figure 9: single sample test power comparison
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+powers <- read.csv('data/test_powers_fams123_adjusted_alpha_chains_1_varying_N.csv')
+k_vals <- c(seq(.2,1,.2),seq(1.25,3,.25))[c(0:9,11:13)]
+families <- 1:3
+n_vals <- c(30,60,100)
+
+KS_results <- list('An30'=c(1.000, 0.968, 0.589, 0.163, 0.050, 0.149, 0.403, 0.687, 0.875, 0.960, 0.998, 1.000),
+                   'An60'= c(1.000, 1.000, 0.870, 0.274, 0.050, 0.262, 0.710, 0.948, 0.996, 1.000, 1.000, 1.000),
+                   'An100'=c(1.000, 1.000, 0.979, 0.416, 0.050, 0.411, 0.911,0.997, 1.000, 1.000, 1.000, 1.000),
+                   'Bn30'=c(0.991, 0.639, 0.236, 0.088, 0.050, 0.053, 0.085, 0.145, 0.238, 0.356, 0.625, 0.742),
+                   'Bn60'=c(1.000, 0.942, 0.423, 0.113, 0.050, 0.073, 0.181, 0.389, 0.646, 0.847, 0.988, 0.998),
+                   'Bn100'=c(1.000, 0.998, 0.662, 0.151, 0.050, 0.105, 0.350, 0.719, 0.941, 0.994, 1.000, 1.000),
+                   'Cn30'=c(0.989, 0.599, 0.190, 0.065, 0.050, 0.098, 0.190, 0.307, 0.440, 0.571, 0.791, 0.867),
+                   'Cn60'=c(1.000, 0.941, 0.406, 0.098, 0.050, 0.132, 0.314, 0.553, 0.770, 0.910, 0.994, 0.999),
+                   'Cn100'=c(1.000, 0.998, 0.669, 0.146, 0.050, 0.181, 0.490, 0.812, 0.965, 0.997, 1.000, 1.000)
+                   )
+T1_results <- list('An30'=c(1.000, 0.981, 0.670, 0.194, 0.050, 0.166, 0.466, 0.761, 0.924, 0.981, 0.999, 1.000),
+                   'An60'=c(1.000, 1.000, 0.915, 0.328, 0.050, 0.306, 0.782, 0.973, 0.999, 1.000, 1.000, 1.000),
+                   'An100'=c(1.000, 1.000, 0.989, 0.490, 0.050, 0.478, 0.949, 0.999, 1.000, 1.000, 1.000, 1.000),
+                   'Bn30'=c(0.999, 0.786, 0.278, 0.093, 0.050, 0.033, 0.035, 0.069, 0.156, 0.308, 0.678, 0.820),
+                   'Bn60'=c(1.000, 0.987, 0.528, 0.113, 0.050, 0.042, 0.121, 0.384, 0.725, 0.926, 0.999, 1.000),
+                   'Bn100'=c(1.000, 1.000, 0.803, 0.151, 0.050, 0.065, 0.350, 0.823, 0.985, 1.000, 1.000, 1.000),
+                   'Cn30'=c(0.988, 0.456, 0.058, 0.035, 0.050, 0.078, 0.136, 0.252, 0.433, 0.633, 0.908, 0.963),
+                   'Cn60'=c(1.000, 0.944, 0.257, 0.042, 0.050, 0.090, 0.248, 0.579, 0.863, 0.975, 1.000, 1.000),
+                   'Cn100'=c(1.000, 0.999, 0.617, 0.059, 0.050, 0.116, 0.475, 0.895, 0.994, 1.000, 1.000, 1.000)
+                   )
+Ns_results <- list('An30'=c(1.000, 0.975, 0.582, 0.145, 0.050, 0.104, 0.299, 0.586, 0.819, 0.940, 0.997, 0.999),
+                   'An60'=c(1.000, 1.000, 0.887, 0.263, 0.050, 0.230, 0.686, 0.948, 0.996, 1.000, 1.000, 1.000),
+                   'An100'=c(1.000, 1.000, 0.986, 0.420, 0.050, 0.398, 0.920, 0.998, 1.000, 1.000, 1.000, 1.000),
+                   'Bn30'=c(1.000, 0.984, 0.649, 0.180, 0.050, 0.102, 0.305, 0.597, 0.827, 0.944, 0.998, 1.000),
+                   'Bn60'=c(1.000, 1.000, 0.919, 0.311, 0.050, 0.248, 0.725, 0.962, 0.998, 1.000, 1.000, 1.000),
+                   'Bn100'=c(1.000, 1.000, 0.991, 0.467, 0.050, 0.439, 0.944, 0.999, 1.000, 1.000, 1.000, 1.000),
+                   'Cn30'=c(0.999, 0.837, 0.356, 0.092, 0.050, 0.129, 0.330, 0.590, 0.800, 0.924, 0.994, 0.999),
+                   'Cn60'=c(1.000, 0.994, 0.711, 0.184, 0.050, 0.210, 0.611, 0.902, 0.988, 0.999, 1.000, 1.000),
+                   'Cn100'=c(1.000, 1.000, 0.921, 0.298, 0.050, 0.322, 0.840, 0.990, 1.000, 1.000, 1.000, 1.000)
+                   )
+U2_results <- list('An30'=c(1.000, 0.858, 0.367, 0.103, 0.050, 0.099, 0.239, 0.443, 0.653, 0.814, 0.966, 0.988),
+                   'An60'=c(1.000, 0.993, 0.659, 0.161, 0.050, 0.158, 0.461, 0.781, 0.944, 0.991, 1.000, 1.000),
+                   'An100'=c(1.000, 1.000, 0.878, 0.244, 0.050, 0.241, 0.708, 0.958, 0.998, 1.000, 1.000, 1.000),
+                   'Bn30'=c(1.000, 0.955, 0.535, 0.138, 0.050, 0.134, 0.370, 0.653, 0.857, 0.956, 0.998, 1.000),
+                   'Bn60'=c(1.000, 1.000, 0.841, 0.239, 0.050, 0.235, 0.676, 0.941, 0.995, 1.000, 1.000, 1.000),
+                   'Bn100'=c(1.000, 1.000, 0.973, 0.372, 0.050, 0.376, 0.899, 0.997, 1.000, 1.000, 1.000, 1.000),
+                   'Cn30'=c(1.000, 0.955, 0.534, 0.138, 0.050, 0.135, 0.370, 0.653, 0.858, 0.956, 0.998, 1.000),
+                   'Cn60'=c(1.000, 1.000, 0.841, 0.236, 0.050, 0.237, 0.678, 0.941, 0.995, 1.000, 1.000, 1.000),
+                   'Cn100'=c(1.000, 1.000, 0.973, 0.372, 0.050, 0.375, 0.899, 0.997, 1.000, 1.000, 1.000, 1.000)
+                   )
+Our_results <- list()
+idx <- 1
+for (n_idx in 1:length(n_vals)) {
+    for (f_idx in families) {
+      idxs <- (n_idx-1)*length(k_vals)*length(families) + (0:(length(k_vals)-1))*length(families) + f_idx
+      Our_results[[paste(c('An','Bn','Cn')[f_idx],n_vals[n_idx],sep="")]] <-powers$p[idxs]
+    }
+  }
+
+```
+
+## Figure 12
+Powers for N = 100
+
+```{r}
+p_trans_a_single <- ggplot(data = data.frame(Our_results)) +
+  geom_point(mapping = aes_(x = k_vals, y = ~An100, colour = factor(1), shape = factor(1)), size = 2.2) +
+  geom_line(mapping = aes_(x = k_vals, y = ~An100, colour = factor(1), linetype = factor(1)), size=.8) +
+  geom_point(data = data.frame(KS_results), mapping = aes_(x = k_vals, y = ~An100, colour = factor(2), shape = factor(2)), size = 2.2) +
+  geom_line(data = data.frame(KS_results), mapping = aes_(x = k_vals, y = ~An100, colour = factor(2), linetype = factor(2)), size=.8) +
+  geom_point(data = data.frame(T1_results), mapping = aes_(x = k_vals, y = ~An100, colour = factor(3), shape = factor(3)), size = 2.2) +
+  geom_line(data = data.frame(T1_results), mapping = aes_(x = k_vals, y = ~An100, colour = factor(3), linetype = factor(3)), size=.8) +
+  geom_point(data = data.frame(U2_results), mapping = aes_(x = k_vals, y = ~An100, colour = factor(4), shape = factor(4)), size = 2.2) +
+  geom_line(data = data.frame(U2_results), mapping = aes_(x = k_vals, y = ~An100, colour = factor(4), linetype = factor(4)), size=.8) +
+  geom_point(data = data.frame(Ns_results), mapping = aes_(x = k_vals, y = ~An100, colour = factor(5), shape = factor(5)), size = 2.2) +
+  geom_line(data = data.frame(Ns_results), mapping = aes_(x = k_vals, y = ~An100, colour = factor(5), linetype = factor(5)), size=.8) +
+  labs(
+      title = TeX('Transformation: A'),
+      x = "k",
+      y = "Rej. Rate"
+    ) + 
+  theme(
+    legend.position = "right",
+    legend.title=element_text(),
+    text = element_text(size = text_size),
+    legend.text = element_text(size = text_size)) +
+  scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1)) +
+  scale_shape_discrete(name = "Test:", labels = c("Ours", "KS-test", "T1-test", "U2-test", "Ns-test")) +
+  scale_linetype_discrete(name = "Test:", labels = c("Ours", "KS-test", "T1-test", "U2-test", "Ns-test")) +
+  scale_colour_discrete(name = "Test:", labels = c("Ours", "KS-test", "T1-test", "U2-test", "Ns-test"), type = color("bright", names=FALSE)(6))
+```
+
+```{r}
+p_trans_b_single <- ggplot(data = data.frame(Our_results), mapping = aes_(x = k_vals, y = ~Bn100, colour = factor(1), shape = factor(1))) +
+  geom_point(size = 2.2) +
+  geom_line(mapping = aes_(linetype = factor(1)), size=.8) +
+  geom_point(data = data.frame(KS_results), mapping = aes_(y = ~Bn100, colour = factor(2), shape = factor(2)), size = 2.2) +
+  geom_line(data = data.frame(KS_results), mapping = aes_(y = ~Bn100, colour = factor(2), linetype = factor(2)), size=.8) +
+  geom_point(data = data.frame(T1_results), mapping = aes_(y = ~Bn100, colour = factor(3), shape = factor(3)), size = 2.2) +
+  geom_line(data = data.frame(T1_results), mapping = aes_(y = ~Bn100, colour = factor(3), linetype = factor(3)), size=.8) +
+  geom_point(data = data.frame(U2_results), mapping = aes_(y = ~Bn100, colour = factor(4), shape = factor(4)), size = 2.2) +
+  geom_line(data = data.frame(U2_results), mapping = aes_(y = ~Bn100, colour = factor(4), linetype = factor(4)), size=.8) +
+  geom_point(data = data.frame(Ns_results), mapping = aes_(y = ~Bn100, colour = factor(5), shape = factor(5)), size = 2.2) +
+  geom_line(data = data.frame(Ns_results), mapping = aes_(y = ~Bn100, colour = factor(5), linetype = factor(5)), size=.8) +
+  labs(
+      title = TeX('Transformation: B'),
+      x = "k",
+      y = "Rej. Rate"
+    ) + 
+  theme(
+    legend.position = "right",
+    legend.title=element_text(),
+    text = element_text(size = text_size),
+    legend.text = element_text(size = text_size)) +
+  scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1)) +
+  scale_shape_discrete(name = "Test:", labels = c("Ours", "KS-test", "T1-test", "U2-test", "Ns-test")) +
+  scale_linetype_discrete(name = "Test:", labels = c("Ours", "KS-test", "T1-test", "U2-test", "Ns-test")) +
+  scale_colour_discrete(name = "Test:", labels = c("Ours", "KS-test", "T1-test", "U2-test", "Ns-test"), type = color("bright", names=FALSE)(6))
+```
+
+```{r}
+p_trans_c_single <- ggplot(data = data.frame(Our_results), mapping = aes_(x = k_vals, y = ~Cn100, colour = factor(1), shape = factor(1))) +
+  geom_point(size = 2.2) +
+  geom_line(mapping = aes_(linetype = factor(1)), size=.8) +
+  geom_point(data = data.frame(KS_results), mapping = aes_(y = ~Cn100, colour = factor(2), shape = factor(2)), size = 2.2) +
+  geom_line(data = data.frame(KS_results), mapping = aes_(y = ~Cn100, colour = factor(2), linetype = factor(2)), size=.8) +
+  geom_point(data = data.frame(T1_results), mapping = aes_(y = ~Cn100, colour = factor(3), shape = factor(3)), size = 2.2) +
+  geom_line(data = data.frame(T1_results), mapping = aes_(y = ~Cn100, colour = factor(3), linetype = factor(3)), size=.8) +
+  geom_point(data = data.frame(U2_results), mapping = aes_(y = ~Cn100, colour = factor(4), shape = factor(4)), size = 2.2) +
+  geom_line(data = data.frame(U2_results), mapping = aes_(y = ~Cn100, colour = factor(4), linetype = factor(4)), size=.8) +
+  geom_point(data = data.frame(Ns_results), mapping = aes_(y = ~Cn100, colour = factor(5), shape = factor(5)), size = 2.2) +
+  geom_line(data = data.frame(Ns_results), mapping = aes_(y = ~Cn100, colour = factor(5), linetype = factor(5)), size=.8) +
+  labs(
+      title = TeX('Transformation: C'),
+      x = "k",
+      y = "Rej. Rate"
+    ) + 
+  theme(
+    legend.position = "right",
+    legend.title=element_text(),
+    text = element_text(size = text_size),
+    legend.text = element_text(size = text_size)) +
+  scale_y_continuous(breaks = c(0,.2,.4,.6,.8,1)) +
+  scale_shape_discrete(name = "Test:", labels = c("Ours", "KS-test", "T1-test", "U2-test", "Ns-test")) +
+  scale_linetype_discrete(name = "Test:", labels = c("Ours", "KS-test", "T1-test", "U2-test", "Ns-test")) +
+  scale_colour_discrete(name = "Test:", labels = c("Ours", "KS-test", "T1-test", "U2-test", "Ns-test"),type = color("bright", names=FALSE)(6))
+```
+
+```{r}
+options(repr.plot.width = 1, repr.plot.height = 1)
+p_sum <- ggarrange(p_trans_a_single, p_trans_b_single, p_trans_c_single, ncol = 3, common.legend = TRUE, legend = "bottom")
+p_sum
+```
+
+```{r}
+#pdf(file="../figures/single_sample_test_power_comparison_fams.pdf", width = 12, height = 5)
+#print(p_sum)
+#dev.off()
+```
+
+## Figure 12: Test power comparison between number of chains
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+plot_type_1 <- function(fnames, legendtitles) {
+  p <- ggplot()
+  nfiles = length(fnames)
+  for (idx in 1:nfiles) {
+    dt <- read.csv(fnames[idx])
+    p <- p + 
+      geom_point(data = dt, mapping = aes_(x = ~N, y = ~rejr, shape = factor(idx), colour = factor(idx))) +
+      geom_line(data = dt, mapping = aes_(x = ~N, y = ~rejr, colour = factor(idx), group = factor(idx)))
+  }
+  p <- p + 
+    hline_at(
+      c(0.05,0.04,0.07),
+      size = c(0.2,0.0,0.0),
+      linetype = 1,
+      color = bayesplot:::get_color("dh")
+      ) +
+      labs(
+        title = "Type I Error of 95% Confidence Bands",
+        x = "Sample Length (N)",
+        y = "False Rejection Rate"
+      )
+  if (length(legendtitles)>1) {
+  p <- p + theme(
+      legend.position = "right",
+      legend.title=element_text()) +
+    scale_x_continuous(trans = 'log10') +
+    scale_shape_discrete(name = "Test", labels = legendtitles) +
+    scale_color_discrete(name = "Test", labels = legendtitles)
+  } else {
+  p <- p + theme(
+      legend.position = "none",
+      legend.title=element_blank()) +
+    scale_x_continuous(trans = 'log10')
+  }
+  p
+}
+
+plot_test_powers <- function(fnames, legendtitles, family_idx) {
+  nfiles = length(fnames)
+    p <- ggplot()
+    for (idx in 1:nfiles) {
+        dt <- read.csv(fnames[idx])
+        p <- p + 
+          geom_point(
+            data = dt[dt$f == family_idx, ], 
+            mapping = aes_(x = ~k, y = ~p, shape = factor(idx), colour = factor(idx)), size = 2.2) +
+          geom_line(
+            data = dt[dt$f == family_idx, ], 
+            mapping = aes_(x = ~k, y = ~p, linetype = factor(idx), colour = factor(idx), group = factor(idx)), size=.8)
+    }
+   p <- p + labs(
+    title = paste('Transformation', c('A','B','C')[family_idx]),
+    x = "k",
+    y = "Rejection Rate"
+    ) +
+    theme(
+      legend.position = "right",
+      legend.title=element_text(),
+      text = element_text(size=text_size),
+      legend.text = element_text(size=text_size)
+    ) +
+  scale_y_continuous(breaks = c(0,0.2,0.4,.6,.8,1)) +
+    scale_shape_discrete(name = "Chains: ", labels = legendtitles) +
+    scale_linetype_discrete(name = "Chains: ", labels = legendtitles) +
+    scale_colour_discrete(name = "Chains: ", labels = legendtitles, type = color("bright", names=FALSE)(6))
+  p
+}
+```
+
+```{r}
+p1 <- plot_test_powers(
+  paste(paste("data/test_powers_fams123_adjusted_alpha_chains_ ",c(2,4,8),sep = "")," .csv",sep = ""),
+  c("2", "4", "8"),
+  family_idx = 1)
+p2 <- plot_test_powers(
+  paste(paste("data/test_powers_fams123_adjusted_alpha_chains_ ",c(2,4,8),sep = "")," .csv",sep = ""),
+  c("2", "4", "8"),
+  family_idx = 2)
+p3 <- plot_test_powers(
+  paste(paste("data/test_powers_fams123_adjusted_alpha_chains_ ",c(2,4,8),sep = "")," .csv",sep = ""),
+  c("2", "4", "8"),
+  family_idx = 3)
+
+p_sum <- ggarrange(p1,p2,p3, ncol=3, common.legend=TRUE, legend="bottom")
+p_sum
+```
+
+```{r}
+#pdf(file="../figures/multi_sample_test_power_comparison_fams.pdf", width = 12, height = 5)
+#print(p_sum)
+#dev.off()
+```

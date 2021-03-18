@@ -1,0 +1,1098 @@
+---
+title: "Plots of Graphical Test for Discrete Uniformity and its Applications in Goodness of Fit Evaluation and Multiple Sample Comparison"
+author: "Teemu Säilynoja"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+---
+
+# Imports and data generation
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(bayesplot)
+library(ggExtra)
+source("ecdf_plot_functions.R")
+source("eight_schools/eight_schools.data.R")
+library(rstan)
+library(ggpubr)
+library(khroma)
+theme_set(bayesplot::theme_default(base_family = "sans"))
+colors <- colour("bright", names = FALSE)(4)
+ggplot <- function(...) ggplot2::ggplot(...) + scale_color_bright()
+theme_update(plot.title = element_text(hjust = 0.5))
+```
+
+## Set parameters for sample generation
+```{r}
+SEED <- 42
+n <- 250
+n_method_comparison <- 32
+N_fig1 = 24
+S_fig1 = 100
+chains <- 4
+mean_shift <- .2
+scale_change <- .2
+mean_shift_multi <- .5
+scale_change_multi <- .5
+plot_fsize_one_per_row <- 20
+plot_fsize_two_per_row <- 22
+plot_fsize_three_per_row <- 30
+fig_width <- 6
+fig_height <- 5
+
+# Should the sampling and more demanding computations be done?
+compute_plots = TRUE
+# Should the plots be drawn?
+make_plots = TRUE
+# Should the plots be saved?
+save <- TRUE
+```
+
+```{r}
+# Pre-compute adjustment level gamma. 
+if (compute_plots == TRUE){
+  gamma_single <- get_gamma(n)
+  gamma_multi <- get_gamma(n, chains = chains)
+  gamma_1000 <- get_gamma(1000, chains = 4)
+}
+```
+
+## Generate samples
+```{r}
+set.seed(SEED)
+samples <- matrix(runif(chains*n), nrow=chains)
+samples_norm <- matrix(rnorm(chains * n), nrow = chains)
+large_variance <- matrix(ecdf(samples_norm[1,])(rnorm(n,0,1 + scale_change)), nrow = 1)
+large_mean <- matrix(ecdf(samples_norm[1,])(rnorm(n,mean_shift,1)), nrow = 1)
+shifted_chain <- samples_norm
+shifted_chain[1,] <- matrix(rnorm(n,mean_shift_multi,1), nrow = 1)
+scaled_chain <- samples_norm
+scaled_chain[1,] <- matrix(rnorm(n,0,1 + scale_change_multi), nrow = 1)
+```
+
+# Plots
+## Figure 1
+```{r}
+if (make_plots == TRUE) {
+  set.seed(SEED)
+  qdunifordered <- function(q, N, i) optimize(function(t) abs(q - 1 + pbinom(i-1, N, t)), c(0,1))$minimum
+  y <- rnorm(N_fig1,0,1)
+  x <- rnorm(S_fig1,0,1)
+  pits <- pnorm(y,0,1)
+  u <- ecdf(x)(y)
+  z <- seq(0,1,length.out = N_fig1+1)
+  bar_idx = 12
+  
+  y_hist <- ggplot() +
+    geom_histogram(mapping = aes(x=y), bins = 32,
+        fill = colors[1],
+        colour = "black") +
+        theme(
+          text = element_text(size = 1.4*plot_fsize_three_per_row),
+          legend.position = 'none',
+          axis.ticks.y = element_blank(),
+          axis.text.y = element_blank(),
+          axis.line.y = element_blank()
+          ) +
+    labs(
+      x = element_text("y"),
+      y = NULL
+    ) +
+    scale_x_continuous(n.breaks = 4, limits=c(-3,3))
+  
+  x_hist <- ggplot() +
+    geom_histogram(mapping = aes(x=x), bins = 32,
+        fill = colors[1],
+        colour = "black") +
+        theme(
+          text = element_text(size = 1.4*plot_fsize_three_per_row),
+          legend.position = 'none',
+          axis.ticks.y = element_blank(),
+          axis.text.y = element_blank(),
+          axis.line.y = element_blank()
+          ) +
+    labs(
+      y = NULL,
+      x = element_text("x")
+    ) +
+    scale_y_continuous(n.breaks = 3, limits=c(0,10)) +
+    scale_x_continuous(n.breaks = 4)
+  
+  p_x <- ggplot(mapping = aes(x=(-90:90)/30, y=dnorm((-90:90)/30,0,1))) +
+    geom_line(size = 1.2, colour = colors[1], alpha=1) +
+        theme(
+          text = element_text(size = 1.4*plot_fsize_three_per_row),
+          legend.position = 'none',
+          axis.ticks.y = element_blank(),
+          axis.text.y = element_blank(),
+          axis.line.y = element_blank()
+          ) +
+    labs(
+      x = element_text("x"),
+      y = NULL
+    ) +
+    scale_y_continuous(breaks = c()) +
+    scale_x_continuous(n.breaks = 4)
+  
+  
+  ecdf_pit <- ggplot(mapping = aes(x=pits, y = ecdf(pits)(pits))) +
+    geom_step(size=1, colour = colors[1]) +
+    geom_segment(
+      aes(
+        x = qbeta(0.025, bar_idx, N_fig1 +1 - bar_idx),
+        y = bar_idx/N_fig1 , 
+        xend = qbeta(0.925, bar_idx, N_fig1 + 1 - bar_idx),
+        yend = bar_idx/N_fig1
+        ),
+      colour = colors[2],
+      arrow = arrow(angle = 90, length = unit(0.02, "npc"), ends = 'both', type = 'closed'),
+      size = 1.8
+      ) + 
+    geom_point(size=2) +
+    theme(
+          text = element_text(size = 1.4*plot_fsize_three_per_row),
+          legend.position = 'none'
+          ) +
+    labs(
+      y = element_text("ECDF"),
+      x = element_text("u")
+    ) +
+    scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1"))
+  
+  u_u <- ggplot(mapping = aes(x=c(0,u,1), y=ecdf(u)(c(0,u,1)))) +
+    geom_step(size=1, colour = colors[1]) +
+    geom_segment(aes(
+      x = qdunifordered(0.025, N_fig1, bar_idx),
+      y = bar_idx/N_fig1 ,
+      xend = qdunifordered(0.925, N_fig1, bar_idx),
+      yend = bar_idx/N_fig1), colour = colors[2],
+      arrow = arrow(angle = 90, length = unit(0.02, "npc"), ends = 'both', type = 'closed'),
+      size = 1.8) +
+        theme(
+          text = element_text(size = 1.4*plot_fsize_three_per_row),
+          legend.position = 'none'
+          ) +
+    geom_point(size=2) +
+    labs(
+      y = element_text("ECDF"),
+      x = element_text("u")
+    ) +
+    scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1"))
+  
+  u_z <- ggplot(mapping = aes(x=z, y=ecdf(u)(z))) +
+    geom_step(size=1, colour = colors[1]) +
+    geom_segment(aes(x = z[bar_idx], y = qbinom(0.025, N_fig1, z[bar_idx])/N_fig1 , xend = z[bar_idx], yend = qbinom(0.925, N_fig1, z[bar_idx])/N_fig1), colour = colors[2],
+      arrow = arrow(angle = 90, length = unit(0.02, "npc"), ends = 'both', type = 'closed'),
+      size = 1.8) +
+        theme(
+          text = element_text(size = 1.4*plot_fsize_three_per_row),
+          legend.position = 'none'
+          ) +
+    geom_point(size=2) +
+    labs(
+      y=element_text("ECDF"),
+      x = element_text("z")
+    ) +
+    scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
+    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1"))
+}
+```
+
+```{r}
+y_hist
+x_hist
+p_x
+ecdf_pit
+u_u
+u_z
+```
+
+
+```{r}
+if (save == TRUE) {
+  pdf(file="figures/normal_y_hist.pdf", width = fig_width, height = .8*fig_height)
+  print(y_hist)
+  dev.off()
+  pdf(file="figures/normal_x_hist.pdf", width = fig_width, height = .8*fig_height)
+  print(x_hist)
+  dev.off()
+  pdf(file="figures/normal_density.pdf", width = fig_width, height = .8*fig_height)
+  print(p_x)
+  dev.off()
+  pdf(file="figures/ecdf_analytical_pit.pdf", width = fig_width, height = fig_height)
+  print(ecdf_pit)
+  dev.off()
+  pdf(file="figures/ecdf_empirical_pit_u.pdf", width = fig_width, height = fig_height)
+  print(u_u)
+  dev.off()
+  pdf(file="figures/ecdf_empirical_pit_z.pdf", width = fig_width, height = fig_height)
+  print(u_z)
+  dev.off()
+}
+```
+## Figure 2
+### Comparison between Aldor-Noiman and our method
+
+```{r}
+if (make_plots == TRUE) {
+  an_bands <- function(n,m,alpha=.05) {
+    require(future.apply)
+    plan("multiprocess")
+    
+    c_m <- future_replicate(m, {
+      y_n_sorted <- sort(runif(n))
+      a_n <- pbeta(y_n_sorted, 1:n, n+1-(1:n))
+      2*min(pmin(a_n,1-a_n))
+    })
+    gamma <- quantile(c_m,alpha)
+    list(
+      upper = qbeta(1-.5*gamma, 1:n, n+1-(1:n)),
+      lower = qbeta(.5*gamma, 1:n, n+1-(1:n))
+    )
+  }
+}
+```
+
+
+```{r}
+if (make_plots == TRUE) {
+  lims_ecdf_hight <- get_lims(n_method_comparison)
+  lims_an <- an_bands(n_method_comparison,100000)
+  p <- seq(0,1,length.out = n_method_comparison+1)
+  pits <- runif(n_method_comparison)
+}  
+```
+
+
+```{r}
+if (make_plots == TRUE){
+  lims_y <- data.frame(list(
+    y = c(rbind(
+      lims_ecdf_hight$lower/n_method_comparison,
+      lims_ecdf_hight$upper/n_method_comparison)
+      ), 
+    idx = c(rbind(1:(n_method_comparison+1),1:(n_method_comparison+1)))))
+  lims_x <- data.frame(list(
+    x=c(rbind(lims_an$lower,lims_an$upper)),
+    idx = c(rbind(1:n_method_comparison,1:n_method_comparison))))
+  
+  p_ecdf_gates <- ggplot() +
+    geom_line(data = lims_y, mapping = aes(x=c(rbind(p,p)), y=y, group=idx), colour = colors[1], size = 1.2, alpha = 1) +
+    geom_point(mapping = aes(x=p, y=ecdf(pits)(p)), size = 2) +
+    labs(x = element_blank(), y = "ECDF", legent.text = element_blank()) +
+      theme(
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.text = element_text(size=plot_fsize_three_per_row)
+      ) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+  
+  p_an_gates <- ggplot() +
+    geom_line(data = lims_x, mapping = aes(y=c(rbind(p[2:(n_method_comparison+1)],p[2:(n_method_comparison+1)])), x=x, group=idx), colour = colors[2], size = 1.2, alpha = 1) +
+    geom_point(data = data.frame(pits), mapping = aes(y=p[2:(n_method_comparison+1)], x=sort(pits)), size = 2) +
+    labs(x = element_blank(), y = "ECDF", legent.text = element_blank())+
+      theme(
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.text = element_text(size=plot_fsize_three_per_row)
+      ) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+}
+
+```
+
+```{r}
+if (save==TRUE) {
+  pdf(file="figures/method_comparison_ecdf_gates.pdf", width = fig_width, height = fig_height)
+  print(p_ecdf_gates)
+  dev.off()
+  pdf(file="figures/method_comparison_aldor-noiman_gates.pdf", width = fig_width, height = fig_height)
+  print(p_an_gates)
+  dev.off()
+}
+```
+
+
+```{r}
+p_ecdf_gates
+p_an_gates
+```
+
+
+## Figure 3
+### Histogram with low bin count
+```{r}
+if (make_plots == TRUE){
+  p_uniformity_hist_20_bins <- draw_hist(samples[1,],bins = 20, fsize = plot_fsize_three_per_row)
+}
+if (save == TRUE) {
+  pdf(file = "figures/uniformity_hist_20_bins.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_hist_20_bins)
+  dev.off()
+}
+```
+
+
+```{r}
+p_uniformity_hist_20_bins
+```
+
+## Histogram and ECDF plots of the uniform sample
+```{r}
+if (make_plots == TRUE){
+    set.seed(SEED)
+    p_uniformity_hist <- draw_hist(samples[1,], fsize = plot_fsize_three_per_row) + coord_cartesian(ylim = layer_scales(p_uniformity_hist_20_bins)$y$range$range)
+    p_uniformity_ecdf <- unif_conf_band(pit = matrix(samples[1,], nrow=1), gamma = gamma_single) +
+      theme(text = element_text(size = plot_fsize_three_per_row), legend.position = 'none') + 
+      scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8,1.0)) + 
+      scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8,1.0))
+      
+    p_uniformity_test_ecdf_diff <- unif_conf_band_diff(pit = matrix(samples[1,], nrow=1), gamma = gamma_single) +
+      theme(text = element_text(size = plot_fsize_three_per_row), legend.position = 'none') + 
+      scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8,1.0)) + 
+      scale_y_continuous(breaks = c(-0.1,0.0,0.1))
+  }
+if (save == TRUE) {
+  pdf(file="figures/uniformity_hist.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_hist)
+  dev.off()
+  pdf(file="figures/uniformity_test_ecdf.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_ecdf)
+  dev.off()
+  pdf(file="figures/uniformity_test_ecdf_diff.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_test_ecdf_diff)
+  dev.off()
+}
+```
+
+```{r}
+p_uniformity_hist
+p_uniformity_ecdf
+p_uniformity_test_ecdf_diff
+```
+
+
+
+
+
+## Figure 4
+### ECDF Marginal Distribution Studies
+```{r}
+if (make_plots == TRUE) {
+  set.seed(SEED)
+  lims <- data.frame(
+    upper = qbinom(0.95, 250, seq(0,1,length.out = 251)),
+    lower = qbinom(0.05, 250, seq(0,1,length.out = 251)))
+  sampled_ecdf <- data.frame(list(x=replicate(50000, .5), y=replicate(50000, ecdf(runif(250))(.5))))
+}
+```
+
+```{r}
+if (make_plots == TRUE) {
+  p_marg_three_xs <- ggplot(data = lims, aes(x=seq(0,1,length.out = 251))) +
+    geom_line(mapping = aes(y=seq(0,1,length.out = 251)), size=.8, alpha = .7, linetype=2, color = colors[1]) +
+    geom_line(mapping=aes(y=lower/250)) +
+    geom_line(mapping=aes(y=upper/250)) +
+    vline_at(c(0.2,0.3,0.9), color=colors[1], linetype= 2, size = 1.2) +
+    geom_point(data=sampled_ecdf, aes(x=x, y=y), alpha=0) +
+    labs(x = "", y = "ECDF", legent.text = element_blank()) +
+      theme(
+        plot.title = element_text(size=plot_fsize_two_per_row),
+        text = element_text(size=plot_fsize_two_per_row),
+        legend.text = element_text(size=plot_fsize_two_per_row)
+      ) +
+    scale_x_continuous(n.breaks = 5, breaks = c(.2,.3,.9)) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+  p_marg_three_xs
+}
+```
+
+```{r}
+if (compute_plots == TRUE) {
+  set.seed(SEED)
+  dt1 <- data.frame(t(replicate(100000, ecdf(runif(250))(c(.2,.3,.9)))))
+}
+```
+
+
+```{r}
+if (make_plots == TRUE){
+  p12 <- ggplot(dt1, aes(x = X1, y= X2)) + geom_density_2d(n=50, colour = colors[1]) + geom_point(alpha=0) +
+    labs(x = "ECDF(x = 0.2)", y = "ECDF(x = 0.3)") +
+      theme(
+        plot.title = element_text(size=plot_fsize_two_per_row),
+        text = element_text(size=plot_fsize_two_per_row),
+        legend.text = element_text(size=plot_fsize_two_per_row)
+        ) +
+    scale_y_continuous(breaks = c(0.2,0.3,0.4))+
+    scale_x_continuous(breaks = c(0.1,0.2,0.3))
+  p13 <- ggplot(dt1, aes(x = X1, y= X3)) + geom_density_2d(n=50, colour = colors[1]) + geom_point(alpha=0) +
+    labs(x = "ECDF(x = 0.2)", y = "ECDF(x = 0.9)")+
+      theme(
+        plot.title = element_text(size=plot_fsize_two_per_row),
+        text = element_text(size=plot_fsize_two_per_row),
+        legend.text = element_text(size=plot_fsize_two_per_row)
+      ) +
+    scale_y_continuous(breaks = c(0.8,0.9,1.0)) +
+    scale_x_continuous(breaks = c(0.1,0.2,0.3))
+  p23 <- ggplot(dt1, aes(x = X2, y= X3)) + geom_density_2d(n=50, colour = colors[1]) + geom_point(alpha=0) +
+    labs(x = "ECDF(x = 0.3)", y = "ECDF(x = 0.9)", legent.text = element_blank())+
+      theme(
+        plot.title = element_text(size=plot_fsize_two_per_row),
+        text = element_text(size=plot_fsize_two_per_row),
+        legend.text = element_text(size=plot_fsize_two_per_row)
+      ) +
+    scale_y_continuous(breaks = c(0.8,0.9,1.0)) +
+    scale_x_continuous(breaks = c(0.2,0.3,0.4))
+  p12 <- ggMarginal(p12, type="histogram", breaks = seq(0,1,length.out = 126),
+      fill = "grey75",
+      color = "grey50")
+  p13 <- ggMarginal(p13, type="histogram", breaks = seq(0,1,length.out = 126),
+      fill = "grey75",
+      color = "grey50")
+  p23 <- ggMarginal(p23, type="histogram", breaks = seq(0,1,length.out = 126),
+      fill = "grey75",
+      color = "grey50")
+}
+```
+
+```{r}
+p12
+p13
+p23
+```
+
+```{r}
+if (save == TRUE){
+  pdf(file="figures/ecdf_height_dependency_evaluation_points.pdf", width = fig_width, height = fig_height)
+  print(p_marg_three_xs)
+  dev.off()
+  pdf(file="figures/ecdf_height_dependency_with_marginals_x1_x2.pdf", width = fig_width, height = fig_height)
+  print(p12)
+  dev.off()
+  pdf(file="figures/ecdf_height_dependency_with_marginals_x1_x3.pdf", width = fig_width, height = fig_height)
+  print(p13)
+  dev.off()
+  pdf(file="figures/ecdf_height_dependency_with_marginals_x2_x3.pdf", width = fig_width, height = fig_height)
+  print(p23)
+  dev.off()
+}
+```
+## Figure 5
+### Transformation to fractional ranks and the ECDF plots of the transformed samples
+```{r}
+demo_chains <- samples_norm
+demo_chains[1,] <- scaled_chain[1,]
+demo_chains[2,] <- shifted_chain[1,]
+demo_transfromed <- u_scale(demo_chains)
+for (chain in 1:4) {
+  assign(
+    paste("hist_chain_", chain,sep=""),
+    ggplot(data = data.frame(X1 = demo_chains[chain, ])) + geom_histogram(
+      mapping = aes(x=X1), bins = 32,
+      fill = colors[chain],
+      color = "black"
+      ) + theme(
+        text = element_text(size = 1.4*plot_fsize_three_per_row),
+        legend.text = element_text(size = 1.4*plot_fsize_three_per_row),
+        plot.title = element_text(size = 1.4*plot_fsize_three_per_row),
+        legend.position = 'none',
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.line.y = element_blank()
+        ) + labs(
+    y = element_text(paste("Chain", chain)),
+    x = if (chain != 4) {element_blank()} else {element_text("Observed value")}
+    ) +
+  scale_y_continuous(n.breaks = 6, limits = c(0,32)) +
+  scale_x_continuous(n.breaks = 6, limits = c(-4, 4))
+  )
+}
+for (chain in 1:4) {
+  assign(
+    paste("hist_tchain_", chain,sep=""),
+    ggplot(data = data.frame(X1 = demo_transfromed[chain, ])) + geom_histogram(
+      mapping = aes(x=X1), bins = 32,
+      fill = colors[chain],
+      color = "black"
+      ) + theme(
+        text = element_text(size = 1.4*plot_fsize_three_per_row),
+        legend.text = element_text(size = 1.4*plot_fsize_three_per_row),
+        plot.title = element_text(size = 1.4*plot_fsize_three_per_row),
+        legend.position = 'none',
+        axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.line.y = element_blank()
+        ) + labs(
+    y = element_blank(),
+    x = if (chain != 4) {element_blank()} else {element_text("Fractional rank")}
+    ) +
+  scale_x_continuous(breaks = c(0, 0.5, 1), 
+                     labels = c("0", "0.5", "1"))
+  )
+}
+ecdfs_4_chains <- ggplot(
+  data = reshape2::melt(apply(u_scale(demo_chains), 1, function(t) ecdf(t)(seq(0,1,length.out=n + 1)))),
+  mapping = aes(x = rep(seq(0,1,length.out=n + 1), 4), y=value, color = factor(Var2), group=factor(Var2))) +
+  geom_step(size=1) +
+  theme(
+    legend.position = 'none',
+    text = element_text(size = plot_fsize_three_per_row),
+    plot.title = element_text(size = plot_fsize_three_per_row),
+  ) +
+  labs(
+    y = element_text("ECDF"),
+    x = element_blank()
+    ) +
+  scale_y_continuous(breaks = c(0, 0.5, 1), 
+                     labels = c("0", "0.5", "1")) +
+  scale_x_continuous(breaks = c(0, 0.5, 1), 
+                     labels = c("0", "0.5", "1")) +
+  scale_color_bright()
+ecdfs_diff_4_chains <- ggplot(
+  data = reshape2::melt(apply(u_scale(demo_chains), 1, function(t) ecdf(t)(seq(0,1,length.out=n + 1)))), 
+  mapping = aes(x = rep(seq(0,1,length.out=n + 1), 4), y=value-rep(seq(0,1,length.out=length(samples[1,]) + 1), 4), color = factor(Var2), group=factor(Var2))) +
+  geom_step(size=1) +
+  theme(
+    legend.position = 'none',
+    text = element_text(size = plot_fsize_three_per_row),
+    plot.title = element_text(size = plot_fsize_three_per_row),
+  ) +
+  labs(
+    y = element_text("ECDF difference"),
+    x = element_text("Fractional rank")
+    ) +
+  scale_y_continuous(breaks = c(0.1,0.0,-0.1,-0.2)) +
+  scale_x_continuous(breaks = c(0, 0.5, 1), 
+                     labels = c("0", "0.5", "1")) +
+  scale_color_bright()
+hist_chain_1
+hist_chain_2
+hist_chain_3
+hist_chain_4
+hist_tchain_1
+hist_tchain_2
+hist_tchain_3
+hist_tchain_4
+ecdfs_4_chains
+ecdfs_diff_4_chains
+```
+
+```{r}
+if (save == TRUE) {
+  for (chain in 1:4) {
+    pdf(file=paste("figures/normal_chains_",chain,".pdf", sep=""), width = fig_width, height = .6*fig_height)
+    nam <-paste("hist_chain_", chain, sep="")
+    print(get(nam))
+    dev.off()
+    pdf(file=paste("figures/transformed_chains_",chain,".pdf", sep=""), width = fig_width, height = .6*fig_height)
+    nam <-paste("hist_tchain_", chain, sep="")
+    print(get(nam))
+    dev.off()
+  } 
+  pdf(file="figures/ecdf_transformed_chains.pdf", width = fig_width, height = fig_height)
+  print(ecdfs_4_chains)
+  dev.off()
+  pdf(file="figures/ecdf_diff_transformed_chains.pdf", width = fig_width, height = fig_height)
+  print(ecdfs_diff_4_chains)
+  dev.off()
+}
+```
+
+## Figure 6
+### Single sample: mean shifted
+```{r}
+if (make_plots == TRUE) {
+  set.seed(SEED)
+  p_uniformity_test_large_mean_hist <- draw_hist(large_mean[1,], fsize=plot_fsize_three_per_row)
+  p_uniformity_test_large_mean_ecdf <- unif_conf_band(pit=matrix(large_mean[1,], nrow=1), gamma = gamma_single) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.text = element_text(size=plot_fsize_three_per_row),
+        legend.position = 'none'
+        ) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+  p_uniformity_test_large_mean_ecdf_diff <- unif_conf_band_diff(pit=matrix(large_mean[1,], nrow=1), gamma = gamma_single) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.text = element_text(size=plot_fsize_three_per_row),
+        legend.position = 'none'
+        ) +
+    scale_y_continuous(n.breaks = 3) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+}
+
+if (save==TRUE) {
+  pdf(file="figures/uniformity_test_large_mean_hist.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_test_large_mean_hist)
+  dev.off()
+  pdf(file="figures/uniformity_test_large_mean_ecdf.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_test_large_mean_ecdf)
+  dev.off()
+  pdf(file="figures/uniformity_test_large_mean_ecdf_diff.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_test_large_mean_ecdf_diff)
+  dev.off()
+}
+```
+
+```{r}
+p_uniformity_test_large_mean_hist
+p_uniformity_test_large_mean_ecdf
+p_uniformity_test_large_mean_ecdf_diff
+```
+
+## Figure 7
+### Single sample: Scaled variance
+```{r}
+if (make_plots == TRUE){
+  set.seed(SEED)
+  p_uniformity_test_large_variance_hist <- draw_hist(large_variance[1,], fsize=plot_fsize_three_per_row)
+  p_uniformity_test_large_variance_ecdf <- unif_conf_band(pit=matrix(large_variance[1,], nrow=1), gamma = gamma_single) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.text = element_text(size=plot_fsize_three_per_row),
+        legend.position = 'none'
+        ) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+  p_uniformity_test_large_variance_ecdf_diff <- unif_conf_band_diff(pit=matrix(large_variance[1,], nrow=1), gamma = gamma_single) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.text = element_text(size=plot_fsize_three_per_row),
+        legend.position = 'none'
+        ) +
+    scale_y_continuous(breaks = c(-0.1,0.0,0.1)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+}
+if (save==TRUE) {
+  pdf(file="figures/uniformity_test_large_variance_hist.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_test_large_variance_hist)
+  dev.off()
+  pdf(file="figures/uniformity_test_large_variance_ecdf.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_test_large_variance_ecdf)
+  dev.off()
+  pdf(file="figures/uniformity_test_large_variance_ecdf_diff.pdf", width = fig_width, height = fig_height)
+  print(p_uniformity_test_large_variance_ecdf_diff)
+  dev.off()
+}
+```
+
+```{r}
+p_uniformity_test_large_variance_hist
+p_uniformity_test_large_variance_ecdf
+p_uniformity_test_large_variance_ecdf_diff
+```
+
+## Figure 8
+### Eight Schools SBC
+```{r echo=FALSE, message=FALSE, warning=FALSE, results="hide"}
+if (compute_plots == TRUE) {
+  set.seed(SEED)
+  m_cp <- rstan::stan_model("eight_schools/eight_schools_cp_sbc.stan")
+  x <- sbc(m_cp,  data = list(J = J, sigma = sigma, y = y), M = 3000, control = list(adapt_delta = 0.99), refresh = 0)
+  tau_ranks <- matrix(unlist(lapply(seq(1,3000,3), function(idx) {sum(x$ranks[[idx]][,2])/length(x$ranks[[idx]][,2])})), ncol = 1000)
+}
+```
+
+```{r}
+if (make_plots == TRUE) {
+  p_8_schools_SBC_hist <- draw_hist(tau_ranks[1,], fsize=plot_fsize_three_per_row) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        )
+  p_8_schools_SBC_ecdf <- unif_conf_band(pit=tau_ranks, gamma = gamma_1000) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = 'none'
+        ) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+  p_8_schools_SBC_ecdf_diff <- unif_conf_band_diff(pit=tau_ranks, gamma = gamma_1000) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = 'none'
+        ) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+}
+if (save==TRUE) {
+  pdf(file="figures/p_eight_schools_SBC_hist.pdf", width = fig_width, height = fig_height)
+  print(p_8_schools_SBC_hist)
+  dev.off()
+  pdf(file="figures/p_eight_schools_SBC_ecdf.pdf", width = fig_width, height = fig_height)
+  print(p_8_schools_SBC_ecdf)
+  dev.off()
+  pdf(file="figures/p_eight_schools_SBC_ecdf_diff.pdf", width = fig_width, height = fig_height)
+  print(p_8_schools_SBC_ecdf_diff)
+  dev.off()
+}
+```
+
+
+```{r}
+p_8_schools_SBC_hist
+p_8_schools_SBC_ecdf
+p_8_schools_SBC_ecdf_diff
+```
+
+## Figure 10
+## Multiple sample comparison: Mean shifted
+
+```{r}
+if (make_plots == TRUE){
+  set.seed(SEED)
+  for (idx in 1:chains) {
+    nam <- paste("p_multi_chain_comparison_shifted_chain_chain" , idx, sep="")
+    assign(nam, draw_hist(shifted_chain, row=idx, title=paste("Chain ", idx, sep=""), fsize = plot_fsize_three_per_row) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ))
+  }
+  p_multi_chain_comparison_shifted_chain_ecdf <- unif_conf_band(pit=shifted_chain, gamma = gamma_multi) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+  p_multi_chain_comparison_shifted_chain_ecdf_diff <- unif_conf_band_diff(pit=shifted_chain, gamma = gamma_multi) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ) +
+    scale_y_continuous(n.breaks = 3) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+}
+if (save==TRUE) {
+  for (idx in 1:chains) {
+    pdf(file=paste("figures/multi_chain_comparison_shifted_chain_chain",idx,".pdf",sep=""), width = fig_width, height = fig_height)
+    nam <- paste("p_multi_chain_comparison_shifted_chain_chain" , idx, sep="")
+    print(get(nam))
+    dev.off()
+  }
+
+pdf(file="figures/multi_chain_comparison_shifted_chain_ecdf.pdf", width = fig_width, height = fig_height)
+print(p_multi_chain_comparison_shifted_chain_ecdf)
+dev.off()
+pdf(file="figures/multi_chain_comparison_shifted_chain_ecdf_diff.pdf", width = fig_width, height = fig_height)
+print(p_multi_chain_comparison_shifted_chain_ecdf_diff)
+dev.off()
+}
+```
+
+```{r}
+p_multi_chain_comparison_shifted_chain_chain1
+p_multi_chain_comparison_shifted_chain_chain2
+p_multi_chain_comparison_shifted_chain_chain3
+p_multi_chain_comparison_shifted_chain_chain4
+p_multi_chain_comparison_shifted_chain_ecdf
+p_multi_chain_comparison_shifted_chain_ecdf_diff
+```
+
+
+## Figure 11
+## Multiple sample comparison: Mean shifted
+
+```{r}
+if (make_plots == TRUE) {
+  set.seed(SEED)
+  for (idx in 1:chains) {
+    nam <- paste("p_multi_chain_comparison_scaled_chain_chain" , idx, sep="")
+    assign(nam, draw_hist(scaled_chain, row=idx, title=paste("Chain ", idx, sep=""), fsize = plot_fsize_three_per_row) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ))
+  }
+  p_multi_chain_comparison_scaled_chain_ecdf <- unif_conf_band(pit=scaled_chain, gamma = gamma_multi) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+  p_multi_chain_comparison_scaled_chain_ecdf_diff <- unif_conf_band_diff(pit=scaled_chain, gamma = gamma_multi) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ) +
+    scale_y_continuous(breaks = c(-0.1, 0.0, 0.1)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+}
+
+if (save==TRUE) {
+  for (idx in 1:chains) {
+    pdf(file=paste("figures/multi_chain_comparison_scaled_chain_chain",idx,".pdf", sep=""), width = fig_width, height = fig_height)
+    nam <- paste("p_multi_chain_comparison_scaled_chain_chain" , idx, sep="")
+    print(get(nam))
+    dev.off()
+  }
+
+pdf(file="figures/multi_chain_comparison_scaled_chain_ecdf.pdf", width = fig_width, height = fig_height)
+print(p_multi_chain_comparison_scaled_chain_ecdf)
+dev.off()
+pdf(file="figures/multi_chain_comparison_scaled_chain_ecdf_diff.pdf", width = fig_width, height = fig_height)
+print(p_multi_chain_comparison_scaled_chain_ecdf_diff)
+dev.off()
+}
+```
+
+```{r}
+p_multi_chain_comparison_scaled_chain_chain1
+p_multi_chain_comparison_scaled_chain_chain2
+p_multi_chain_comparison_scaled_chain_chain3
+p_multi_chain_comparison_scaled_chain_chain4
+p_multi_chain_comparison_scaled_chain_ecdf
+p_multi_chain_comparison_scaled_chain_ecdf_diff
+```
+## Figure 13
+### Chains with autocorrelation
+
+```{r}
+if (make_plots == TRUE) {
+  set.seed(SEED)
+  p_ar_chains_ess_per_s <- ggplot()
+  for (nchains in c(2,4,8)) {
+    dt <- read.csv(paste("data/mean_rejection_rate_per_ess_", nchains, "_chains.csv", sep = ""))
+    p_ar_chains_ess_per_s <- p_ar_chains_ess_per_s + 
+      geom_point(data = dt, mapping = aes_(x = dt$ess, y = dt$rejr, shape = factor(nchains), colour = factor(nchains))) +
+      geom_line(data = dt, mapping = aes_(x = dt$ess, y = dt$rejr, colour = factor(nchains)), size = 1)
+  }
+  p_ar_chains_ess_per_s <- p_ar_chains_ess_per_s + 
+    hline_at(
+      c(0.05),
+      size = c(0.2),
+      linetype = 1,
+      color = bayesplot:::get_color("dh")
+      ) +
+      labs(
+        x = "ESS/S",
+        y = "Rejection Rate"
+      ) + theme(
+      legend.position = "right",
+      legend.title=element_text(),
+        text = element_text(size=plot_fsize_two_per_row),
+        legend.text = element_text(size=plot_fsize_two_per_row)) +
+    scale_y_continuous(breaks = c(0.05,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_color_discrete(name = "Chains", labels = c("2", "4", "8"), type = colors) +
+    scale_shape_discrete(name = "Chains", labels = c("2", "4", "8"))
+}
+```
+
+```{r}
+if (make_plots == TRUE) {
+  set.seed(SEED)
+  p_ar_chains_ess_per_ar <- ggplot()
+  for (nchains in c(2,4,8)) {
+    dt <- read.csv(paste("data/mean_rejection_rate_per_ar_", nchains, "_chains.csv", sep = ""))
+    p_ar_chains_ess_per_ar <- p_ar_chains_ess_per_ar + 
+      geom_point(data = dt, mapping = aes_(x = dt$ar, y = dt$rejr, shape = factor(nchains), colour = factor(nchains))) +
+      geom_line(data = dt, mapping = aes_(x = dt$ar, y = dt$rejr, colour = factor(nchains)), size = 1)
+  }
+  p_ar_chains_ess_per_ar <- p_ar_chains_ess_per_ar + 
+    hline_at(
+      c(0.05),
+      size = c(0.2),
+      linetype = 1,
+      color = bayesplot:::get_color("dh")
+      ) +
+      labs(
+        x = "AR parameter value",
+        y = "Rejection Rate"
+      ) + theme(
+      legend.position = "none",
+      legend.title=element_text(),
+        text = element_text(size=plot_fsize_two_per_row),
+        legend.text = element_text(size=plot_fsize_two_per_row)) +
+    scale_y_continuous(breaks = c(0.05, 0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_colour_discrete(name = "Chains", labels = c("2", "4", "8"), type = colors) +
+    scale_shape_discrete(name = "Chains", labels = c("2", "4", "8"))
+}
+```
+
+```{r}
+p_ar_chains <- ggarrange(p_ar_chains_ess_per_ar, p_ar_chains_ess_per_s, ncol=2, common.legend = TRUE, legend = "bottom")
+p_ar_chains
+```
+
+```{r}
+if (save==TRUE){
+  pdf(file="figures/multi_chain_comparison_rej_rate_autocorrelation.pdf", width = 2*fig_width, height = fig_height)
+  print(p_ar_chains)
+  dev.off()
+  }
+```
+
+
+
+## Figure 14 & 15
+### Multiple sample comparison: Eight Schools sampling issues
+
+```{r}
+if (compute_plots == TRUE) {
+  set.seed(SEED)
+  fit_cp <- stan(
+    file = "eight_schools/eight_schools_cp.stan",
+    data = list(J = J, sigma = sigma, y = y),
+    chains = 4,
+    warmup = 1000,
+    iter = 2000,
+    cores = 4,
+    seed = 483892929,
+    refresh = 0,
+    control = list(adapt_delta = 0.99)
+  )
+  chains_cp <- t(matrix(extract(fit_cp, pars = c("tau"), permuted=FALSE),ncol=4))
+  
+  fit_ncp <- stan(
+    file = "eight_schools/eight_schools_ncp.stan",
+    data = list(J = J, sigma = sigma, y = y),
+    chains = 4,
+    warmup = 1000,
+    iter = 2000,
+    cores = 4,
+    seed = 483892929,
+    refresh = 0,
+    control = list(adapt_delta = 0.99)
+  )
+  
+  chains_ncp <- t(matrix(extract(fit_ncp, pars = c("tau"), permuted=FALSE),ncol=4))
+}
+```
+
+### Centered parameterization
+
+```{r}
+if (make_plots == TRUE){
+  set.seed(SEED)
+  for (idx in 1:4) {
+    nam <- paste("p_eight_schools_cp_hist_" , idx, sep = "")
+    assign(nam, draw_hist(chains_cp, row = idx, title = paste("Chain ", idx, sep=""), fsize = plot_fsize_three_per_row) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ))
+  }
+  p_eight_schools_cp_ecdf <- unif_conf_band(pit=chains_cp, gamma = gamma_1000)  +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+  p_eight_schools_cp_ecdf_diff <- unif_conf_band_diff(pit=chains_cp, gamma = gamma_1000) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ) +
+    scale_y_continuous(breaks = c(-0.05, 0.0, 0.05)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+}
+if (save==TRUE) {
+  for (idx in 1:4) {
+    pdf(file=paste("figures/eight_schools_cp_hist_",idx,".pdf",sep=""), width = fig_width, height = fig_height)
+    nam <- paste("p_eight_schools_cp_hist_" , idx, sep="")
+    print(get(nam))
+    dev.off()
+  }
+
+  pdf(file="figures/eight_schools_cp_ecdf.pdf", width = fig_width, height = fig_height)
+  print(p_eight_schools_cp_ecdf)
+  dev.off()
+  pdf(file="figures/eight_schools_cp_ecdf_diff.pdf", width = fig_width, height = fig_height)
+  print(p_eight_schools_cp_ecdf_diff)
+  dev.off()
+}
+```
+
+```{r}
+p_eight_schools_cp_hist_1
+p_eight_schools_cp_hist_2
+p_eight_schools_cp_hist_3
+p_eight_schools_cp_hist_4
+p_eight_schools_cp_ecdf
+p_eight_schools_cp_ecdf_diff
+```
+
+### Non-centered parameterization
+
+```{r}
+if (make_plots == TRUE){
+  set.seed(SEED)
+  for (idx in 1:4) {
+    nam <- paste("p_eight_schools_ncp_hist_" , idx, sep = "")
+    assign(nam, draw_hist(chains_ncp, row = idx, title = paste("Chain ", idx, sep=""), fsize = plot_fsize_three_per_row) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ))
+  }
+  p_eight_schools_ncp_ecdf <- unif_conf_band(pit=chains_ncp, gamma = gamma_1000) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ) +
+    scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+  p_eight_schools_ncp_ecdf_diff <- unif_conf_band_diff(pit=chains_ncp, gamma = gamma_1000) +
+      theme(
+        plot.title = element_text(size=plot_fsize_three_per_row),
+        text = element_text(size=plot_fsize_three_per_row),
+        legend.position = "none"
+        ) +
+    scale_y_continuous(breaks = c(-0.05, 0.0, 0.05)) +
+    scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
+}
+if (save == TRUE) {
+  for (idx in 1:4) {
+    pdf(file=paste("figures/eight_schools_ncp_hist_",idx,".pdf",sep=""), width = fig_width, height = fig_height)
+    nam <- paste("p_eight_schools_ncp_hist_" , idx, sep="")
+    print(get(nam))
+    dev.off()
+  }
+
+  pdf(file="figures/eight_schools_ncp_ecdf.pdf", width = fig_width, height = fig_height)
+  print(p_eight_schools_ncp_ecdf)
+  dev.off()
+  pdf(file="figures/eight_schools_ncp_ecdf_diff.pdf", width = fig_width, height = fig_height)
+  print(p_eight_schools_ncp_ecdf_diff)
+  dev.off()
+}
+```
+
+```{r}
+p_eight_schools_ncp_hist_1
+p_eight_schools_ncp_hist_2
+p_eight_schools_ncp_hist_3
+p_eight_schools_ncp_hist_4
+p_eight_schools_ncp_ecdf
+p_eight_schools_ncp_ecdf_diff
+```
+
+
+
