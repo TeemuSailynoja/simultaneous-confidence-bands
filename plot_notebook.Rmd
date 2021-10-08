@@ -54,6 +54,7 @@ save <- TRUE
 if (compute_plots == TRUE){
   gamma_single <- get_gamma(n)
   gamma_multi <- get_gamma(n, chains = chains)
+  gamma_SBC <- get_gamma(1000)
   gamma_1000 <- get_gamma(1000, chains = 4)
 }
 ```
@@ -697,8 +698,10 @@ p_uniformity_test_large_variance_ecdf_diff
 if (compute_plots == TRUE) {
   set.seed(SEED)
   m_cp <- rstan::stan_model("eight_schools/eight_schools_cp_sbc.stan")
-  x <- sbc(m_cp,  data = list(J = J, sigma = sigma, y = y), M = 3000, control = list(adapt_delta = 0.99), refresh = 0)
-  tau_ranks <- matrix(unlist(lapply(seq(1,3000,3), function(idx) {sum(x$ranks[[idx]][,2])/length(x$ranks[[idx]][,2])})), ncol = 1000)
+  x <- sbc(m_cp,  data = list(J = J, sigma = sigma, y = y), M = 1000, control = list(adapt_delta = 0.99), refresh = 0, iter = 5000, warmup = 1000)
+  tau_ranks <- matrix(unlist(lapply(x$ranks, function(ranks){
+    K <- length(ranks[,2])
+    sum(ranks[seq(1,K,4),2])/length(ranks[seq(1,K,4),2])})), ncol = 1000)
 }
 ```
 
@@ -710,7 +713,7 @@ if (make_plots == TRUE) {
         text = element_text(size=plot_fsize_three_per_row),
         legend.position = "none"
         )
-  p_8_schools_SBC_ecdf <- unif_conf_band(pit=tau_ranks, gamma = gamma_1000) +
+  p_8_schools_SBC_ecdf <- unif_conf_band(pit=tau_ranks, gamma = gamma_SBC) +
       theme(
         plot.title = element_text(size=plot_fsize_three_per_row),
         text = element_text(size=plot_fsize_three_per_row),
@@ -718,7 +721,7 @@ if (make_plots == TRUE) {
         ) +
     scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
     scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
-  p_8_schools_SBC_ecdf_diff <- unif_conf_band_diff(pit=tau_ranks, gamma = gamma_1000) +
+  p_8_schools_SBC_ecdf_diff <- unif_conf_band_diff(pit=tau_ranks, gamma = gamma_SBC) +
       theme(
         plot.title = element_text(size=plot_fsize_three_per_row),
         text = element_text(size=plot_fsize_three_per_row),
