@@ -1,0 +1,254 @@
+---
+title: "Autocorrelation studies"
+output: html_notebook
+---
+
+```{r}
+library(ggplot2)
+library(khroma)
+library(bayesplot)
+source("alpha_adjustment_functions.R")
+source("thin_functions.R")
+library(extrafont)
+library("posterior")
+
+theme_set(bayesplot::theme_default(base_family = "Times"))
+colors <- colour("bright", names = FALSE)(7)
+ggplot <- function(...) {
+  ggplot2::ggplot(...) + scale_color_bright()
+}
+theme_update(plot.title = element_text(hjust = 0.5))
+```
+
+# 
+```{r}
+# Chain lengths to run the tests with.
+N = 1000
+
+# Number of autocorrelated chains to use in multiple sample comparison.
+Ls <- c(2, 4)
+
+# AR parameter values to test.
+sigmas <- round(seq(-.9, .9, .1), 2)
+
+# Number of tests per N-L-sigma triple.
+M <- 1000
+
+# Produce L possibly autocorrelated chains of length N.
+make_y <- function(N, L, sigma) {
+  if (sigma == 0) {
+    y = replicate(L, rnorm(N))
+  } else {
+    y = replicate(L, arima.sim(n = N, list(ar = c(sigma)), sd = sqrt(1 - sigma ^ 2)))
+  }
+  y
+}
+
+```
+
+
+
+# Inspect the effect autocorrelation has on the single sample uniformity test.
+  
+```{r, warning=FALSE}
+# Initiate a vector to store computed adjustment parameter values
+gammas = numeric(N)
+```
+
+
+```{r, warning=FALSE}
+res = NULL
+cat("Sigma: ", end = "")
+for (sigma in sigmas) {
+  cat(sigma, ", ", sep = "")
+    
+    # Add 4 rows to the results data.frame, one for un-thinned and 1 for each thinning method.
+    # We fill `rej`, `tot`, `ess` and `thin_by` below.
+    res = rbind(
+      res,
+      data.frame(
+        "N" = rep(N, 4),
+        "sigma" = rep(sigma, 4),
+        "type" = c("unthinned", "trad", "tb", "q-trad"),
+        "rej" = 0,
+        "tot" = 0,
+        "ess" = 0,
+        "thin_by" = 0
+      )
+    )
+    for (m in seq_len(M)) {
+      y = arima.sim(n = N, list(ar = c(sigma)), sd = sqrt((1-sigma^2)))
+      
+      ## thin with 3 strategies
+      
+      # Traditional
+      y.thinned = thin(y, by = N / posterior::ess_basic(y))
+      # By ESS of worst quantile
+      y.q_ess = thin(y, 
+                     by = by_quantiles(
+                       y, by_fun = function(x) {length(x)/posterior::ess_basic(x)},
+                       n_quantiles = 20))
+      # By min( ESS-Tail, ESS-bulk), ignore ESS-tail, if NAN.
+      y.tb = thin(y, by = {length(y) / min(posterior::ess_bulk(y), if(!is.na(posterior::ess_tail(y))){posterior::ess_tail(y)} else {length(y)})})
+      
+      ## Calculate missing coverage parameters
+      for (n in c(N, length(y.thinned), length(y.q_ess), length(y.tb))) {
+        if (gammas[n] == 0) {
+          gammas[n] = adjust_alpha_optimize(.05, n)
+        }
+      }
+      
+      # Test for uniformity
+      res.u = test_uniformity(pnorm(y), gammas[N])
+      res.thinned = test_uniformity(pnorm(y.thinned), gammas[length(y.thinned)])
+      res.q_ess = test_uniformity(pnorm(y.q_ess), gammas[length(y.q_ess)])
+      res.tb = test_uniformity(pnorm(y.tb), gammas[length(y.tb)])
+      
+      ## Append results to the data.
+      # keep track of ess and thin_by for each thinned sample.
+      # `tot` keeps track of total number of samples for mean calculation.
+      res_0 = data.frame(
+        "ess" = c(
+          ess(y),
+          ess(y.thinned),
+          ess(y.q_ess),
+          ess(y.tb)
+        ),
+        "rej" = c(res.u, res.thinned, res.q_ess, res.tb),
+        "tot" = rep(1, 4),
+        "thin_by" = c(1, N/length(y.thinned), N/length(y.q_ess), N/length(y.tb))
+      )
+      # Replacing the 0 values from above.
+      res[(nrow(res) - 3):nrow(res), c("ess", "rej", "tot", "thin_by")] = res[(nrow(res) - 3):nrow(res), c("ess", "rej", "tot", "thin_by")] + res_0
+  }
+}
+```
+
+# Inspect the effect of autocorrelation and effectiveness of thinning on multiple sample comparison
+```{r warning=FALSE}
+res_L = NULL
+```
+
+
+```{r warning=FALSE}
+for (L in Ls) {
+  cat("L: ", L, " - N: ", N, "\n")
+  cat("Sigma: ")
+  for (sigma in sigmas) {
+    cat(sigma, end = ", ")
+    res_L = rbind(
+      res_L,
+      data.frame(
+        "L" = c(L, L, L, L),
+        "N" = c(N, N, N, N),
+        "sigma" = c(sigma, sigma, sigma, sigma),
+        "type" = c("un-thinned", "trad-thin", "q-thin", "q-pct-thin"),
+        "rej" = 0,
+        "tot" = 0,
+        "ess" = 0,
+        "thin_by" = 0
+      )
+    )
+    for (m in seq_len(M)) {
+      y = make_y(N, L, sigma)
+
+      ## Thin with 3 strategies
+      # Traditional
+      y.thinned = thin(y, by = length(y) / posterior::ess_basic(y))
+      # By the wors quantile ESS
+      y.q = thin(y, by = min(N/10,{k = by_quantiles(y, by_fun = function(x)(length(x)) / posterior::ess_basic(x)); if(is.na(k)){k}else{k}}))
+      # By min(ESS-Tail, ESS-Bulk), ignore ESS-Tail, if NaN.
+      y.tb = thin(y, by = length(y) / min(posterior::ess_bulk(y), {k = posterior::ess_tail(y); if(is.na(k)){N}else{k}}))
+      
+      
+      ## Calculate missing coverage parameters
+      for (n in c(N, nrow(y.thinned), nrow(y.q), nrow(y.tb))) {
+        if (gammas_L[n, max(L, 2)] == 0) {
+          gammas_L[n, max(L, 2)] = adjust_alpha_simulate_chains(.05, niterations = n, nchains = max(L, 2), M = 1000)
+        }
+      }
+      
+      # Test for uniformity
+      # Here we use u_scale to compute the fractional ranks of the chains in relation to the combined sample.
+      res.u = test_uniformity_chains(u_scale(y), gammas_L[N, max(L, 2)])
+      res.thinned = test_uniformity_chains(u_scale(y.thinned), gammas_L[nrow(y.thinned), max(L, 2)])
+      res.q = test_uniformity_chains(u_scale(y.q), gammas_L[nrow(y.q), max(L, 2)])
+      res.tb = test_uniformity_chains(u_scale(y.tb), gammas_L[nrow(y.tb), max(L, 2)])
+      
+      ## Append results to the data.
+      # keep track of ess and thin_by for each thinned sample.
+      # `tot` keeps track of total number of samples for mean calculation.
+      res_0 = data.frame(
+        "ess" = c(
+          posterior::ess_basic(y),
+          posterior::ess_basic(y.thinned),
+          posterior::ess_basic(y.q),
+          posterior::ess_basic(y.tb)
+        ),
+        "rej" = c(res.u, res.thinned, res.q, res.tb),
+        "tot" = c(1, 1, 1, 1),
+        "thin_by" = c(1, N/nrow(y.thinned), N/nrow(y.q), N/nrow(y.tb))
+      )
+      res_L[(nrow(res_L) - 3): nrow(res_L), c("ess", "rej", "tot", "thin_by")] = res_L[(nrow(res_L) - 3): nrow(res_L), c("ess", "rej", "tot", "thin_by")] + res_0
+    }
+  }
+cat("\n")
+}
+```
+
+# Plot figures of the results and save them.
+
+```{r}
+p1 = ggplot(res_L[res_L[,"L"] == 1,], mapping = aes(x=sigma, y=rej/tot, group = type, color=type)) + 
+  geom_line(size = 1.5) +
+  hline_at(0.05, linetype = "dashed", alpha = .5, size = 1) + 
+  labs(title = "1 AR chain", y = "Rejection rate", x = "", color = "Strategy") + 
+  scale_color_bright(labels = c("Quantile", "Tail - Bulk", "Traditional", "Unthinned")) +
+  scale_x_continuous(breaks = c(-0.3, 0, 0.3, 0.6, 0.9)) +
+  scale_y_continuous(breaks = c(0, 0.3, 0.6, 0.9), limits = c(0,1)) +
+  theme(text = element_text(size = 24), legend.text = element_text(size = 20))
+p2 = ggplot(res_L[res_L[,"L"] == 2,], mapping = aes(x=sigma, y=rej/tot, group = type, color=type)) + 
+  geom_line(size = 1.5) +
+  hline_at(0.05, linetype = "dashed", alpha = .5, size = 1) + 
+  labs(title= "2 AR chains", y = "", x = "", color = "Strategy") + 
+  scale_color_bright(labels = c("Quantile", "Tail - Bulk", "Traditional", "Unthinned")) +
+  scale_x_continuous(breaks = c(-0.3, 0, 0.3, 0.6, 0.9)) +
+  scale_y_continuous(breaks = c(0, 0.3, 0.6, 0.9), limits = c(0,1)) +
+  theme(text = element_text(size = 24), legend.text = element_text(size = 20))
+p3 = ggplot(res_L[res_L[,"L"] == 4,], mapping = aes(x=sigma, y=rej/tot, group = type, color=type)) + 
+  geom_line(size = 1.5) +
+  hline_at(0.05, linetype = "dashed", alpha = .5, size = 1) + 
+  labs(title="4 AR chains", y = "", x = "", color = "Strategy") + 
+  scale_color_bright(labels = c("Quantile", "Tail - Bulk", "Traditional", "Unthinned")) +
+  scale_x_continuous(breaks = c(-0.3, 0, 0.3, 0.6, 0.9)) +
+  scale_y_continuous(breaks = c(0, 0.3, 0.6, 0.9), limits = c(0,1)) +
+  theme(text = element_text(size = 24), legend.text = element_text(size = 20))
+g1 = ggplot(res_L[res_L[,"L"] == 1,], mapping = aes(x=sigma, y=thin_by/tot, group = type, color=type)) + 
+  geom_line(size = 1.5) + 
+  hline_at(0.05, linetype = "dashed", alpha = .5, size = 1) + 
+  labs(y = "Thin by", x = "AR parameter", color = "Strategy") + 
+  scale_color_bright(labels = c("Quantile", "Tail - Bulk", "Traditional", "Unthinned")) +
+  scale_x_continuous(breaks = c(-0.3, 0, 0.3, 0.6, 0.9)) +
+  scale_y_continuous(limits = c(0,60)) +
+  theme(text = element_text(size = 24), legend.text = element_text(size = 20))
+g2 = ggplot(res_L[res_L[,"L"] == 2,], mapping = aes(x=sigma, y=thin_by/tot, group = type, color=type)) + 
+  geom_line(size = 1.5) + 
+  hline_at(0.05, linetype = "dashed", alpha = .5, size = 1) + 
+  labs(y = "", x = "AR parameter", color = "Strategy") + 
+  scale_color_bright(labels = c("Quantile", "Tail - Bulk", "Traditional", "Unthinned")) +
+  scale_x_continuous(breaks = c(-0.3, 0, 0.3, 0.6, 0.9)) +
+  scale_y_continuous(limits = c(0,60)) +
+  theme(text = element_text(size = 24), legend.text = element_text(size = 20))
+g3 = ggplot(res_L[res_L[,"L"] == 4,], mapping = aes(x=sigma, y=thin_by/tot, group = type, color=type)) + 
+  geom_line(size = 1.5) + 
+  hline_at(0.05, linetype = "dashed", alpha = .5, size = 1) + 
+  labs(y = "", x = "AR parameter", color = "Strategy") + 
+  scale_color_bright(labels = c("Quantile", "Tail - Bulk", "Traditional", "Unthinned")) +
+  scale_x_continuous(breaks = c(-0.3, 0, 0.3, 0.6, 0.9)) +
+  scale_y_continuous(limits = c(0,60)) +
+  theme(text = element_text(size = 24), legend.text = element_text(size = 20))
+
+ggpubr::ggarrange(p1,p2,p3,g1,g2,g3, ncol=3, nrow=2, common.legend = TRUE, legend = "bottom")
+ggsave("figures/thinning_and_rejectionrate_chains.pdf", width = 12, height=9)
+```
+

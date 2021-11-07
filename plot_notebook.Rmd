@@ -1,5 +1,5 @@
 ---
-title: "Plots of Graphical Test for Discrete Uniformity and its Applications in Goodness of Fit Evaluation and Multiple Sample Comparison"
+title: "Plots of Graphical Test for Discrete Uniformity and its Applications inGoodness of Fit Evaluation and Multiple Sample Comparison"
 author: "Teemu Säilynoja"
 output:
   html_document:
@@ -54,7 +54,6 @@ save <- TRUE
 if (compute_plots == TRUE){
   gamma_single <- get_gamma(n)
   gamma_multi <- get_gamma(n, chains = chains)
-  gamma_SBC <- get_gamma(1000)
   gamma_1000 <- get_gamma(1000, chains = 4)
 }
 ```
@@ -77,134 +76,185 @@ scaled_chain[1,] <- matrix(rnorm(n,0,1 + scale_change_multi), nrow = 1)
 ```{r}
 if (make_plots == TRUE) {
   set.seed(SEED)
-  qdunifordered <- function(q, N, i) optimize(function(t) abs(q - 1 + pbinom(i-1, N, t)), c(0,1))$minimum
-  y <- rnorm(N_fig1,0,1)
-  x <- rnorm(S_fig1,0,1)
-  pits <- pnorm(y,0,1)
-  u <- ecdf(x)(y)
-  z <- seq(0,1,length.out = N_fig1+1)
+  qdunifordered <-
+    function(q, N, i)
+      optimize(function(t)
+        abs(q - 1 + pbinom(i - 1, N, t)), c(0, 1))$minimum
+  y <- rnorm(N_fig1, 0, 1)
+  x <- replicate(N_fig1, rnorm(S_fig1, 0, 1))
+  pits <- pnorm(y, 0, 1)
+  u <- sapply(1:N_fig1, function(n)
+    ecdf(x[, n])(y[n]))
+  z <- seq(0, 1, length.out = N_fig1 + 1)
   bar_idx = 12
   
   y_hist <- ggplot() +
-    geom_histogram(mapping = aes(x=y), bins = 32,
-        fill = colors[1],
-        colour = "black") +
-        theme(
-          text = element_text(size = 1.4*plot_fsize_three_per_row),
-          legend.position = 'none',
-          axis.ticks.y = element_blank(),
-          axis.text.y = element_blank(),
-          axis.line.y = element_blank()
-          ) +
-    labs(
-      x = element_text("y"),
-      y = NULL
+    geom_histogram(
+      mapping = aes(x = y),
+      bins = 32,
+      fill = colors[1],
+      colour = "black"
     ) +
-    scale_x_continuous(n.breaks = 4, limits=c(-3,3))
+    theme(
+      text = element_text(size = 1.4 * plot_fsize_three_per_row),
+      legend.position = 'none',
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.line.y = element_blank()
+    ) +
+    labs(x = element_text("y"),
+         y = NULL) +
+    scale_x_continuous(n.breaks = 4, limits = c(-3, 3))
   
-  x_hist <- ggplot() +
-    geom_histogram(mapping = aes(x=x), bins = 32,
-        fill = colors[1],
-        colour = "black") +
-        theme(
-          text = element_text(size = 1.4*plot_fsize_three_per_row),
-          legend.position = 'none',
-          axis.ticks.y = element_blank(),
-          axis.text.y = element_blank(),
-          axis.line.y = element_blank()
-          ) +
-    labs(
-      y = NULL,
-      x = element_text("x")
+  x_hist1 <- ggplot() +
+    geom_histogram(
+      mapping = aes(x = x[, 1]),
+      bins = 32,
+      fill = colors[3],
+      colour = "black"
     ) +
-    scale_y_continuous(n.breaks = 3, limits=c(0,10)) +
+    theme(
+      text = element_text(size = 1.4 * plot_fsize_three_per_row),
+      legend.position = 'none',
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.line.y = element_blank()
+    ) +
+    labs(y = NULL,
+         x = expression(x ^ 1)) +
+    scale_y_continuous(n.breaks = 3, limits = c(0, 10)) +
     scale_x_continuous(n.breaks = 4)
   
-  p_x <- ggplot(mapping = aes(x=(-90:90)/30, y=dnorm((-90:90)/30,0,1))) +
-    geom_line(size = 1.2, colour = colors[1], alpha=1) +
-        theme(
-          text = element_text(size = 1.4*plot_fsize_three_per_row),
-          legend.position = 'none',
-          axis.ticks.y = element_blank(),
-          axis.text.y = element_blank(),
-          axis.line.y = element_blank()
-          ) +
-    labs(
-      x = element_text("x"),
-      y = NULL
+  x_hist2 <- ggplot() +
+    geom_histogram(
+      mapping = aes(x = x[, 2]),
+      bins = 32,
+      fill = colors[3],
+      colour = "black"
     ) +
+    theme(
+      text = element_text(size = 1.4 * plot_fsize_three_per_row),
+      legend.position = 'none',
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.line.y = element_blank()
+    ) +
+    labs(y = NULL,
+         x = expression(x ^ N)) +
+    scale_y_continuous(n.breaks = 3, limits = c(0, 10)) +
+    scale_x_continuous(n.breaks = 4)
+  
+  p_x <-
+    ggplot(mapping = aes(x = (-90:90) / 30, y = dnorm((-90:90) / 30, 0, 1))) +
+    geom_line(size = 1.8,
+              colour = colors[3],
+              alpha = 1) +
+    theme(
+      text = element_text(size = 1.4 * plot_fsize_three_per_row),
+      legend.position = 'none',
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.line.y = element_blank()
+    ) +
+    labs(x = element_text("x"),
+         y = NULL) +
     scale_y_continuous(breaks = c()) +
     scale_x_continuous(n.breaks = 4)
   
   
-  ecdf_pit <- ggplot(mapping = aes(x=pits, y = ecdf(pits)(pits))) +
-    geom_step(size=1, colour = colors[1]) +
+  ecdf_pit <- ggplot(mapping = aes(x = pits, y = ecdf(pits)(pits))) +
+    geom_step(size = 1.8, colour = colors[1]) +
     geom_segment(
       aes(
-        x = qbeta(0.025, bar_idx, N_fig1 +1 - bar_idx),
-        y = bar_idx/N_fig1 , 
+        x = qbeta(0.025, bar_idx, N_fig1 + 1 - bar_idx),
+        y = bar_idx / N_fig1 ,
         xend = qbeta(0.925, bar_idx, N_fig1 + 1 - bar_idx),
-        yend = bar_idx/N_fig1
-        ),
+        yend = bar_idx / N_fig1
+      ),
       colour = colors[2],
-      arrow = arrow(angle = 90, length = unit(0.02, "npc"), ends = 'both', type = 'closed'),
+      arrow = arrow(
+        angle = 90,
+        length = unit(0.02, "npc"),
+        ends = 'both',
+        type = 'closed'
+      ),
       size = 1.8
-      ) + 
-    geom_point(size=2) +
+    ) +
+    geom_point(size = 2.2) +
     theme(
-          text = element_text(size = 1.4*plot_fsize_three_per_row),
-          legend.position = 'none'
-          ) +
-    labs(
-      y = element_text("ECDF"),
-      x = element_text("u")
+      text = element_text(size = 1.4 * plot_fsize_three_per_row),
+      legend.position = 'none'
     ) +
+    labs(y = element_text("ECDF"),
+         x = element_text("u")) +
     scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
-    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1"))
+    scale_x_continuous(breaks = c(0, .5, 1),
+                       labels = c("0", "0.5", "1"))
   
-  u_u <- ggplot(mapping = aes(x=c(0,u,1), y=ecdf(u)(c(0,u,1)))) +
-    geom_step(size=1, colour = colors[1]) +
-    geom_segment(aes(
-      x = qdunifordered(0.025, N_fig1, bar_idx),
-      y = bar_idx/N_fig1 ,
-      xend = qdunifordered(0.925, N_fig1, bar_idx),
-      yend = bar_idx/N_fig1), colour = colors[2],
-      arrow = arrow(angle = 90, length = unit(0.02, "npc"), ends = 'both', type = 'closed'),
-      size = 1.8) +
-        theme(
-          text = element_text(size = 1.4*plot_fsize_three_per_row),
-          legend.position = 'none'
-          ) +
-    geom_point(size=2) +
-    labs(
-      y = element_text("ECDF"),
-      x = element_text("u")
+  u_u <- ggplot(mapping = aes(x = c(0, u, 1), y = ecdf(u)(c(0, u, 1)))) +
+    geom_step(size = 1.8, colour = colors[1]) +
+    geom_segment(
+      aes(
+        x = qdunifordered(0.025, N_fig1, bar_idx),
+        y = bar_idx / N_fig1 ,
+        xend = qdunifordered(0.925, N_fig1, bar_idx),
+        yend = bar_idx / N_fig1
+      ),
+      colour = colors[2],
+      arrow = arrow(
+        angle = 90,
+        length = unit(0.02, "npc"),
+        ends = 'both',
+        type = 'closed'
+      ),
+      size = 1.8
     ) +
+    theme(
+      text = element_text(size = 1.4 * plot_fsize_three_per_row),
+      legend.position = 'none'
+    ) +
+    geom_point(size = 2.2) +
+    labs(y = element_text("ECDF"),
+         x = element_text("u")) +
     scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
-    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1"))
+    scale_x_continuous(breaks = c(0, .5, 1),
+                       labels = c("0", "0.5", "1"))
   
-  u_z <- ggplot(mapping = aes(x=z, y=ecdf(u)(z))) +
-    geom_step(size=1, colour = colors[1]) +
-    geom_segment(aes(x = z[bar_idx], y = qbinom(0.025, N_fig1, z[bar_idx])/N_fig1 , xend = z[bar_idx], yend = qbinom(0.925, N_fig1, z[bar_idx])/N_fig1), colour = colors[2],
-      arrow = arrow(angle = 90, length = unit(0.02, "npc"), ends = 'both', type = 'closed'),
-      size = 1.8) +
-        theme(
-          text = element_text(size = 1.4*plot_fsize_three_per_row),
-          legend.position = 'none'
-          ) +
-    geom_point(size=2) +
-    labs(
-      y=element_text("ECDF"),
-      x = element_text("z")
+  u_z <- ggplot(mapping = aes(x = z, y = ecdf(u)(z))) +
+    geom_step(size = 1.8, colour = colors[1]) +
+    geom_segment(
+      aes(
+        x = z[bar_idx],
+        y = qbinom(0.025, N_fig1, z[bar_idx]) / N_fig1 ,
+        xend = z[bar_idx],
+        yend = qbinom(0.925, N_fig1, z[bar_idx]) / N_fig1
+      ),
+      colour = colors[2],
+      arrow = arrow(
+        angle = 90,
+        length = unit(0.02, "npc"),
+        ends = 'both',
+        type = 'closed'
+      ),
+      size = 1.8
     ) +
+    theme(
+      text = element_text(size = 1.4 * plot_fsize_three_per_row),
+      legend.position = 'none'
+    ) +
+    geom_point(size = 2.2) +
+    labs(y = element_text("ECDF"),
+         x = element_text("z")) +
     scale_y_continuous(breaks = c(0, 1), labels = c("0", "1")) +
-    scale_x_continuous(breaks = c(0, .5, 1), labels = c("0", "0.5", "1"))
+    scale_x_continuous(breaks = c(0, .5, 1),
+                       labels = c("0", "0.5", "1"))
 }
 ```
 
 ```{r}
 y_hist
-x_hist
+x_hist1
+x_hist2
 p_x
 ecdf_pit
 u_u
@@ -214,13 +264,12 @@ u_z
 
 ```{r}
 if (save == TRUE) {
-  pdf(file="figures/normal_y_hist.pdf", width = fig_width, height = .8*fig_height)
+  pdf(file="figures/normal_y_hist.pdf", width = fig_width, height = .6*fig_height)
   print(y_hist)
   dev.off()
-  pdf(file="figures/normal_x_hist.pdf", width = fig_width, height = .8*fig_height)
-  print(x_hist)
-  dev.off()
-  pdf(file="figures/normal_density.pdf", width = fig_width, height = .8*fig_height)
+  ggsave("figures/normal_x_hist1.pdf",plot=x_hist1, width = fig_width, height = .6*fig_height)
+  ggsave("figures/normal_x_hist2.pdf",plot=x_hist2, width = fig_width, height = .6*fig_height)
+  pdf(file="figures/normal_density.pdf", width = fig_width, height = .6*fig_height)
   print(p_x)
   dev.off()
   pdf(file="figures/ecdf_analytical_pit.pdf", width = fig_width, height = fig_height)
@@ -698,10 +747,8 @@ p_uniformity_test_large_variance_ecdf_diff
 if (compute_plots == TRUE) {
   set.seed(SEED)
   m_cp <- rstan::stan_model("eight_schools/eight_schools_cp_sbc.stan")
-  x <- sbc(m_cp,  data = list(J = J, sigma = sigma, y = y), M = 1000, control = list(adapt_delta = 0.99), refresh = 0, iter = 5000, warmup = 1000)
-  tau_ranks <- matrix(unlist(lapply(x$ranks, function(ranks){
-    K <- length(ranks[,2])
-    sum(ranks[seq(1,K,4),2])/length(ranks[seq(1,K,4),2])})), ncol = 1000)
+  x <- sbc(m_cp,  data = list(J = J, sigma = sigma, y = y), M = 3000, control = list(adapt_delta = 0.99), refresh = 0)
+  tau_ranks <- matrix(unlist(lapply(seq(1,3000,3), function(idx) {sum(x$ranks[[idx]][,2])/length(x$ranks[[idx]][,2])})), ncol = 1000)
 }
 ```
 
@@ -713,7 +760,7 @@ if (make_plots == TRUE) {
         text = element_text(size=plot_fsize_three_per_row),
         legend.position = "none"
         )
-  p_8_schools_SBC_ecdf <- unif_conf_band(pit=tau_ranks, gamma = gamma_SBC) +
+  p_8_schools_SBC_ecdf <- unif_conf_band(pit=tau_ranks, gamma = gamma_1000) +
       theme(
         plot.title = element_text(size=plot_fsize_three_per_row),
         text = element_text(size=plot_fsize_three_per_row),
@@ -721,7 +768,7 @@ if (make_plots == TRUE) {
         ) +
     scale_y_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0)) +
     scale_x_continuous(breaks = c(0.0,0.2,0.4,0.6,0.8, 1.0))
-  p_8_schools_SBC_ecdf_diff <- unif_conf_band_diff(pit=tau_ranks, gamma = gamma_SBC) +
+  p_8_schools_SBC_ecdf_diff <- unif_conf_band_diff(pit=tau_ranks, gamma = gamma_1000) +
       theme(
         plot.title = element_text(size=plot_fsize_three_per_row),
         text = element_text(size=plot_fsize_three_per_row),
