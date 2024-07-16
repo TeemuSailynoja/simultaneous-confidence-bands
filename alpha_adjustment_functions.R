@@ -192,6 +192,38 @@ alpha_quantile <- function(gamma, alpha, tol = 0.001) {
   a
 }
 
+# Which percentage of ECDF of uniform samples of length `length(x)` exhibit at most
+# the same level of deviation from the theoretical expectation as the ECDF of x?
+uniformity_deviation_quantile <- function(x, K = length(x)) {
+  N <- length(x)
+  z <- 1:(K-1) / K
+  cdf <- ecdf(x)(z)
+  gamma <- min(c(
+    pbinom(cdf, size = N, prob = z),
+    pbinom(cdf - 1, size = N, prob = z, lower.tail = F)))
+  z2 <- c(z, 1)
+  z1 <- c(0, z)
+
+  # pre-compute quantiles and use symmetry for increased efficiency
+  x2_lower <- qbinom(gamma, N, z2)
+  x2_upper <- c(N - rev(x2_lower)[seq_len(K)[-1]], N)
+
+  # compute the total probability of trajectories inside the envelope
+  # initialize interior set and corresponding probabilities
+  # known to be 0 and 1 for the starting value z1 = 0
+  x1 <- 0
+  p_int <- 1
+  for (i in seq_along(z1)) {
+    tmp <- p_interior(
+      p_int, x1 = x1, x2 = x2_lower[i]:x2_upper[i],
+      z1 = z1[i], z2 = z2[i], gamma = gamma, N = N
+    )
+    x1 <- tmp$x1
+    p_int <- tmp$p_int
+  }
+  sum(p_int)
+}
+
 # adjust the alpha level of the envelope test using optimization
 adjust_alpha_optimize <- function(alpha, N, K = N) {
   optimize(target_gamma, c(0, alpha), alpha = alpha, N = N, K = K)$minimum
