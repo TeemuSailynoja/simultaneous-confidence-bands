@@ -197,7 +197,7 @@ alpha_quantile <- function(gamma, alpha, tol = 0.001) {
 uniformity_deviation_quantile <- function(x, K = length(x)) {
   N <- length(x)
   z <- 1:(K-1) / K
-  cdf <- ecdf(x)(z)
+  cdf <- ecdf(x)(z) * N
   gamma <- min(c(
     pbinom(cdf, size = N, prob = z),
     pbinom(cdf - 1, size = N, prob = z, lower.tail = F)))
